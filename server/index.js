@@ -2,6 +2,16 @@ const express = require('express');
 const bodyPaser = require('body-parser');
 const session = require('express-session');
 const massive = require('massive');
+const bcrypt = require('bcrypt')
+const saltRounds = 12
+
+
+// bcrypt.hash('helloworld', saltRounds).then(hashedPassword => {
+//   console.log('hashedPassword', hashedPassword)
+//   bcrypt.compare('helloworld', hashedPassword).then(passwordsMatch => {
+//     console.log('do the passwords Match?', passwordsMatch)
+//   })
+// })
 
 require('dotenv').config();
 const app = express();
@@ -18,13 +28,15 @@ app.use(express.static(`${__dirname}/../build`));
 app.post('/register', (req, res) => {
   const db = app.get('db');
   const { username, password } = req.body;
-  db.create_user([username, password]).then(() => {
-    req.session.user = { username };
-    res.json({ user: req.session.user })
-  }).catch(error => {
-    console.log('error', error);
-    res.status(500).json({ message: 'Something bad happened! '})
-  });
+  bcrypt.hash(password, saltRounds).then(hashedPassword => {
+    db.create_user([username, hashedPassword]).then(() => {
+      req.session.user = { username };
+      res.json({ user: req.session.user })
+    }).catch(error => {
+      console.log('error', error);
+      res.status(500).json({ message: 'Something bad happened! '})
+    });
+  })
 });
 
 app.post('/login', (req, res) => {
@@ -32,12 +44,14 @@ app.post('/login', (req, res) => {
   const { username, password } = req.body;
   db.find_user([username]).then(users => {
     if (users.length) {
-      if (users[0].password === password) {
-        req.session.user = { username: users[0].username };
-        res.json({ user: req.session.user });
-      } else {
-        res.status(403).json({ message: 'Wrong password' })
-      }
+      bcrypt.compare(password, user[0].password).then(passwordsMatched => {
+        if (passwordsMatched) {
+          req.session.user = { username: users[0].username };
+          res.json({ user: req.session.user });
+        } else {
+          res.status(403).json({ message: 'Wrong password' })
+        }
+      })
     } else {
       res.status(403).json({ message: "That user is not registered" })
     }
